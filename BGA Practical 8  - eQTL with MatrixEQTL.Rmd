@@ -1,0 +1,445 @@
+---
+title: "eQTL Analysis with MatrixEQTL"
+author: "Beatriz Manso"
+date: '2022-04-28'
+output: 
+  distill::distill_article:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    code_folding: false
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Expression quantitative trait loci (eQTL) analysis are designed to find
+genetic variations that affect the expression of one or more genes.
+
+For example, a gene-SNP pair for which the expression of the gene
+correlates with the allelic configuration of the SNP is considered an
+eQTL.
+
+Gene expression phenotypes are explained by eQTLs, which account for a
+fraction of genetic variance. EQTL analyses involve the direct
+correlation of genetic variation with gene expression levels typically
+measured across tens or hundreds of individuals.
+
+We will explore the process using the codes and data provided in the
+eQTL package.
+
+# Methods
+
+Set working Directory:
+
+```{r}
+setwd("C:/Users/manso/OneDrive - University of West London/MSc Bioinformatics - UWL/6.BGA - Bioinformatics and Genome Analysis/week 6 - eQTL/practical")
+```
+
+Install required packages and load libraries:
+
+```{r}
+if (!requireNamespace("MatrixEQTL", quietly = TRUE))
+   install.packages("MatrixEQTL")
+
+library(MatrixEQTL)
+```
+
+This package contains 5 datasets:
+
+1.  snpsloc.txt
+2.  geneloc.txt
+3.  Covariates.txt
+4.  GE.txt
+5.  SNP.txt
+
+## 1. Test all gene-SNP pairs and plot a histogram of all p-values:
+
+### Location of the package with the data files.
+
+```{r}
+base.dir = find.package('MatrixEQTL')
+```
+
+### Settings
+
+-   Linear model to use:
+
+```{r}
+#modelANOVA, modelLINEAR, or modelLINEAR_CROSS
+useModel = modelLINEAR  
+```
+
+-   Genotype file name:
+
+```{r}
+SNP_file_name = paste(base.dir, "/data/SNP.txt", sep="")
+```
+
+-   Gene expression file name::
+
+```{r}
+expression_file_name = paste(base.dir, "/data/GE.txt", sep="")
+```
+
+-   Covariates file name - Set to character() for no covariates:
+
+```{r}
+covariates_file_name = paste(base.dir, "/data/Covariates.txt", sep="")
+```
+
+-   Output file name:
+
+```{r}
+output_file_name = tempfile()
+```
+
+-   Only associations significant at this level will be saved:
+
+```{r}
+pvOutputThreshold = 1e-2
+```
+
+-   Error covariance matrix - Set to numeric() for identity:
+
+```{r}
+errorCovariance = numeric()
+#errorCovariance = read.table("Sample_Data/errorCovariance.txt")
+```
+
+### Load genotype data
+
+```{r}
+snps = SlicedData$new()
+snps$fileDelimiter = "\t"       # the TAB character
+snps$fileOmitCharacters = "NA"  # denote missing values;
+snps$fileSkipRows = 1           # one row of column labels
+snps$fileSkipColumns = 1        # one column of row labels
+snps$fileSliceSize = 2000       # read file in slices of 2,000 rows
+snps$LoadFile(SNP_file_name)
+```
+
+### Load gene expression data
+
+```{r}
+gene = SlicedData$new();
+gene$fileDelimiter = "\t";        # the TAB character
+gene$fileOmitCharacters = "NA";   # denote missing values;
+gene$fileSkipRows = 1;            # one row of column labels
+gene$fileSkipColumns = 1;         # one column of row labels
+gene$fileSliceSize = 2000;        # read file in slices of 2,000 rows
+gene$LoadFile(expression_file_name)
+```
+
+### Load covariates
+
+```{r}
+cvrt = SlicedData$new()
+cvrt$fileDelimiter = "\t"       # the TAB character
+cvrt$fileOmitCharacters = "NA"  # denote missing values;
+cvrt$fileSkipRows = 1           # one row of column labels
+cvrt$fileSkipColumns = 1        # one column of row labels
+
+if(length(covariates_file_name)>0) {
+  cvrt$LoadFile(covariates_file_name)
+  }
+```
+
+### Run analysis
+
+```{r}
+me = Matrix_eQTL_engine(snps = snps,
+                        gene = gene,
+                        cvrt = cvrt,
+                        output_file_name = output_file_name,
+                        pvOutputThreshold = pvOutputThreshold,
+                        useModel = useModel,
+                        errorCovariance = errorCovariance,
+                        verbose = TRUE,
+                        pvalue.hist = TRUE,
+                        min.pv.by.genesnp = FALSE,
+                        noFDRsaveMemory = FALSE)
+
+unlink(output_file_name)
+```
+
+### Results
+
+```{r}
+cat('Analysis done in: ', me$time.in.sec, ' seconds', '\n');
+cat( 'Detected eQTLs: ', '\n');
+show(me$all$eqtls)
+
+#We can also figure look at the number and type of eQTL
+show(me$all$neqtls)
+```
+
+### View the eQTL in the table
+
+```{r}
+View(me$all$eqtls)
+```
+
+View() will open the table in another tab in R
+
+### Plot the histogram of all p-values
+
+```{r}
+plot(me)
+```
+
+## 2. Test local and distand gene-SNP pairs separately and plot Q-Q plots of local and distant p-values:
+
+### Location of the package with the data files.
+
+```{r}
+base.dir = find.package('MatrixEQTL')
+# base.dir = '.'
+```
+
+### Settings
+
+-   Linear model to use, modelANOVA, modelLINEAR, or modelLINEAR_CROSS
+
+```{r}
+useModel = modelLINEAR  # modelANOVA, modelLINEAR, or modelLINEAR_CROSS
+```
+
+-   Genotype file name
+
+```{r}
+SNP_file_name = paste(base.dir, "/data/SNP.txt", sep="")
+snps_location_file_name = paste(base.dir, "/data/snpsloc.txt", sep="")
+```
+
+-   Gene expression file name
+
+```{r}
+expression_file_name = paste(base.dir, "/data/GE.txt", sep="")
+gene_location_file_name = paste(base.dir, "/data/geneloc.txt", sep="");
+```
+
+-   Covariates file name - Set to character() for no covariates:
+
+```{r}
+covariates_file_name = paste(base.dir, "/data/Covariates.txt", sep="")
+```
+
+-   Output file name:
+
+```{r}
+output_file_name_cis = tempfile()
+output_file_name_tra = tempfile()
+```
+
+-   Only associations significant at this level will be saved
+
+```{r}
+pvOutputThreshold_cis = 2e-2
+pvOutputThreshold_tra = 1e-2
+```
+
+-   Error covariance matrix - Set to numeric() for identity.
+
+```{r}
+errorCovariance = numeric()
+#errorCovariance = read.table("Sample_Data/errorCovariance.txt")
+```
+
+-   Distance for local gene-SNP pairs
+
+```{r}
+cisDist = 1e6
+```
+
+### Load genotype data
+
+```{r}
+snps = SlicedData$new()
+snps$fileDelimiter = "\t"       # the TAB character
+snps$fileOmitCharacters = "NA"  # denote missing values;
+snps$fileSkipRows = 1           # one row of column labels
+snps$fileSkipColumns = 1        # one column of row labels
+snps$fileSliceSize = 2000       # read file in slices of 2,000 rows
+snps$LoadFile(SNP_file_name)
+```
+
+### Load gene expression data
+
+```{r}
+gene = SlicedData$new()
+gene$fileDelimiter = "\t"      # the TAB character
+gene$fileOmitCharacters = "NA" # denote missing values;
+gene$fileSkipRows = 1          # one row of column labels
+gene$fileSkipColumns = 1       # one column of row labels
+gene$fileSliceSize = 2000      # read file in slices of 2,000 rows
+gene$LoadFile(expression_file_name)
+```
+
+### Load covariates
+
+```{r}
+cvrt = SlicedData$new()
+cvrt$fileDelimiter = "\t"      # the TAB character
+cvrt$fileOmitCharacters = "NA" # denote missing values;
+cvrt$fileSkipRows = 1          # one row of column labels
+cvrt$fileSkipColumns = 1       # one column of row labels
+
+if(length(covariates_file_name)>0) {
+  cvrt$LoadFile(covariates_file_name)
+  }
+```
+
+### Run the analysis
+
+```{r}
+snpspos = read.table(snps_location_file_name,
+                     header = TRUE,
+                     stringsAsFactors = FALSE)
+
+genepos = read.table(gene_location_file_name,
+                     header = TRUE,
+                     stringsAsFactors = FALSE)
+
+me = Matrix_eQTL_main( snps = snps, 
+                       gene = gene,
+                       cvrt = cvrt,
+                       output_file_name = output_file_name_tra,
+                       pvOutputThreshold = pvOutputThreshold_tra, 
+                       useModel = useModel,
+                       errorCovariance = errorCovariance,
+                       verbose = TRUE,
+                       output_file_name.cis = output_file_name_cis,
+                       pvOutputThreshold.cis = pvOutputThreshold_cis,
+                       snpspos = snpspos,
+                       genepos = genepos,
+                       cisDist = cisDist,
+                       pvalue.hist = "qqplot",
+                       min.pv.by.genesnp = FALSE,
+                       noFDRsaveMemory = FALSE)
+
+unlink(output_file_name_tra)
+unlink(output_file_name_cis)
+```
+
+### Results:
+
+```{r}
+cat('Analysis done in: ', me$time.in.sec, ' seconds', '\n')
+cat('Detected local eQTLs:', '\n')
+show(me$cis$eqtls)
+
+cat('Detected distant eQTLs:', '\n')
+show(me$trans$eqtls)
+```
+
+### Plot the Q-Q plot of local and distant p-values
+
+```{r}
+plot(me)
+```
+
+## 3. Create an artificial dataset and plot the histogram and Q-Q plot of all p-values
+
+### Define number of samples
+
+```{r}
+n = 100
+```
+
+### Define number of variables
+
+```{r}
+ngs = 2000
+```
+
+### Common signal in all variables (population stratification)
+
+```{r}
+pop = 0.2 * rnorm(n)
+```
+
+### Data matrices
+
+```{r}
+snps.mat = matrix(rnorm(n*ngs), ncol = ngs) + pop
+gene.mat = matrix(rnorm(n*ngs), ncol = ngs) + pop + snps.mat*((1:ngs)/ngs)^9/2
+```
+
+### Data objects for Matrix eQTL engine
+
+```{r}
+snps1 = SlicedData$new( t( snps.mat ) )
+gene1 = SlicedData$new( t( gene.mat ) )
+cvrt1 = SlicedData$new( )
+
+rm(snps.mat, gene.mat)
+```
+
+### Slice data in blocks of 500 variables
+
+```{r}
+snps1$ResliceCombined(500)
+gene1$ResliceCombined(500)
+```
+
+### Name of temporary output file
+
+```{r}
+filename = tempfile()
+```
+
+### Perform analysis recording information for a histogram
+
+```{r}
+meh = Matrix_eQTL_engine(snps = snps1,
+                         gene = gene1, 
+                         cvrt = cvrt1,
+                         output_file_name = filename,
+                         pvOutputThreshold = 1e-100,
+                         useModel = modelLINEAR,
+                         errorCovariance = numeric(),
+                         verbose = TRUE,
+                         pvalue.hist = 100
+                         )
+
+unlink(filename)
+```
+
+### Create PNG with the histogram and plot it
+
+```{r}
+png(filename = "histogram.png", width = 650, height = 650)
+plot(meh, col="grey")
+# dev.off()
+```
+
+### Perform analysis recording information for a Q-Q plot
+
+```{r}
+meq = Matrix_eQTL_engine(snps = snps1,
+                         gene = gene1,
+                         cvrt = cvrt1,
+                         output_file_name = filename,
+                         pvOutputThreshold = 1e-6,
+                         useModel = modelLINEAR,
+                         errorCovariance = numeric(),
+                         verbose = TRUE,
+                         pvalue.hist = "qqplot")
+
+unlink(filename)
+```
+
+### Create PNG with the QQplot and plot it
+
+```{r}
+plot(meq, pch = 16, cex = 0.7)
+# dev.off()
+```
